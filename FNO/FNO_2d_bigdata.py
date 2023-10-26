@@ -3,16 +3,13 @@ import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
-
-import matplotlib.pyplot as plt
+from torch.utils.data import Dataset, DataLoader
 from utilities3 import *
-import pdb
 import operator
 from functools import reduce
 from functools import partial
 import sys
 from timeit import default_timer
-from torchsummary import summary
 from Adam import Adam
 from loguru import logger
 import time
@@ -86,7 +83,7 @@ class FNO2d(nn.Module):
         self.modes2 = modes2
         self.width = width
         self.padding = 2 # pad the domain if input is non-periodic
-        self.fc0 = nn.Linear(12, self.width)
+        self.fc0 = nn.Linear(3, self.width)
         # input channel is 12: the solution of the previous 10 timesteps + 2 locations (u(t-10, x, y), ..., u(t-1, x, y),  x, y)
 
         self.conv0 = SpectralConv2d_fast(self.width, self.width, self.modes1, self.modes2)
@@ -155,13 +152,13 @@ class FNO2d(nn.Module):
 
 class myDataset(Dataset):
     def __init__(self,var,begid,num,case_name):
-        self.path = f'/work/tzhang/PR_DNS_base/DNS/climate/{case_name}/record-{var}/'
-        self.out_path = f'/work/tzhang/FNO_DNS/data/ml_pde_prdns/{case_name}/{var}/'
+        self.path = f'/pscratch/sd/z/zhangtao/FNO_PR_DNS/data/{case_name}/record-{var}/'
+        self.out_path = f'/pscratch/sd/z/zhangtao/FNO_PR_DNS/data/{case_name}/{var}/'
         self.num = num
         self.begid = begid
         self.var = var
         self.gen = False
-        os.system(f"mkdir -p {self.out_path}")
+        #os.system(f"mkdir -p {self.out_path}")
 
     def __getitem__(self,index):
         T_in = 1
@@ -184,7 +181,7 @@ class myDataset(Dataset):
 
         else:
             data = np.load(f'{self.out_path}/data-{index:04d}.npz')
-            data_x = data['data_x']
+            data_x = np.moveaxis(data['data_x'],0,2)
             data_y = data['data_y']
         return data_x,data_y
 
@@ -206,18 +203,24 @@ modes = 30#60#12
 width = 32
 step = 1
 device = torch.device('cuda:0')
-batch_size = 32
+batch_size = 3
+res = 2048
 
+logger.remove()
+fmt = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <cyan>{level}</cyan> | {message}"
 logger.add(sys.stdout, format=fmt)
 log_path = f'../../logs/FNO_log_{var}_r_{res}_vel_2'
 if os.path.exists(log_path):
-res = 2048
+    os.remove(log_path)
+ii = logger.add(log_path)
 
 if process == 'Train':
     begid = 0
     num = 2000
+    print("beofre dataloader")
     dataset = myDataset(var,begid,num,case_num)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True,num_workers=1)
+    print("after dataloader")
 
     model = FNO2d(modes, modes, width).to(device)
     optimizer = Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
@@ -227,14 +230,10 @@ if process == 'Train':
     for ep in range(epochs):
         model.train()
         train_l2_step = 0
-        for xx, yy in train_loader:
-            xx = xx.to(device)
-            yy = yy.to(device)
-            print(xx.shape)
-            print(yy.shape)
-            
+        for xx,yy in dataloader:
+            xx = xx.to(device).float()
+            yy = yy.to(device).float()
             im = model(xx)
-            print(im.shape)
 
             loss = myloss(im.reshape(im.shape[0], -1), yy.reshape(im.shape[0], -1))
             train_l2_step += loss.item()
@@ -246,3 +245,4 @@ if process == 'Train':
         scheduler.step()
         l2_train_step = train_l2_step/2000
         logger.info(f'{ep=} {l2_train_step=:.5f}')
+        torch.save(model, f'../../models/FNO_model_{var}_r_{res}')
