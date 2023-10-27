@@ -152,7 +152,7 @@ class FNO2d(nn.Module):
 
 class myDataset(Dataset):
     def __init__(self,var,begid,num,case_name,gen_flag=False):
-        self.path = f'/pscratch/sd/z/zhangtao/FNO_PR_DNS/data/{case_name}/record-{var}/'
+        self.path = f'/pscratch/sd/z/zhangtao/PR_DNS_base_ray/{case_name}/record-{var}/'
         self.out_path = f'/pscratch/sd/z/zhangtao/FNO_PR_DNS/data/{case_name}/python_data/{var}/'
         self.num = num
         self.begid = begid
@@ -197,7 +197,7 @@ process = args.process
 var = args.var
 
 case_num = 'out-entrainment2dm_d_0.512_g_2048_init1'
-case_num = 'out-entrainment2dm_g_1024'
+#case_num = 'out-entrainment2dm_g_1024'
 learning_rate = 0.002
 scheduler_step = 100
 scheduler_gamma = 0.5
@@ -207,7 +207,7 @@ width = 32
 step = 1
 device = torch.device('cuda:1')
 batch_size = 5
-res = 1024
+res = 2048
 
 logger.remove()
 fmt = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <cyan>{level}</cyan> | {message}"
@@ -218,8 +218,14 @@ if os.path.exists(log_path):
 ii = logger.add(log_path)
 
 if process == 'Data':
-    begid = 1000
-    num = 2000
+    data_for_train = False
+    batch_size = 32
+    if data_for_train:
+        begid = 1000
+        num = 2000
+    else:
+        begid = 0
+        num = 200
     dataset = myDataset(var,begid,num,case_num,gen_flag=True)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False,num_workers=10)
     for xx,yy in dataloader:
