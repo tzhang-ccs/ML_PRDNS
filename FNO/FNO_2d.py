@@ -1,8 +1,5 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[1]:
-
+import sys
+sys.path.append('../utils')
 
 import os
 import torch
@@ -18,7 +15,6 @@ from functools import reduce
 from functools import partial
 import sys
 from timeit import default_timer
-from torchsummary import summary
 from Adam import Adam
 from loguru import logger
 import time
@@ -247,14 +243,13 @@ if __name__ == '__main__':
         norm_init2 = {}
         norm_init2['xvel'] = []
         norm_init2['temp'] = []
+        norm_init2['vel'] = []
 
         if process == 'STest':
             norm_init2['xvel'] = [0.28377, -0.13178]
             norm_init2['temp'] = [0.83325, 270.56335]
 
-        dataset_train_path = f'../../data/pr-dns/data/out-entrainment2dm_d_0.512_g_{res}_init2/pr_dns_{var}.npy'
-        #dataset_train_path = f'../../data/pr-dns/data/out-entrainment2dm_d_0.512_g_{res}_init1/pr_dns_{var}.npy'
-        #dataset_train_path = f'../../data/pr-dns/data/out-entrainment2dm_d_0.512_g_{res}_init1_no_fb/pr_dns_{var}.npy'
+        dataset_train_path = f'/work/tzhang/FNO_DNS/data/ml_pde_prdns/out-entrainment2dm_d_0.512_g_{res}_init2/pr_dns_{var}.npy'
         dataset_3d = np.load(dataset_train_path)
         dataset_4d = gen4ddata(dataset_3d, 20)
         del dataset_3d
@@ -344,33 +339,29 @@ if __name__ == '__main__':
                 forward_time = forward_time + t2 - t1
                 backward_time = backward_time + t4 - t3
             t6 = time.time()
-#            print(f"{forward_time=}")
-#            print(f"{backward_time=}")
-#            print(f"train_time={t6-t5}") 
-               
                 
-            test_l2_step = 0
-            model.eval()
-            with torch.no_grad():
-                for xx, yy in test_loader:
-                    xx = xx.to(device)
-                    yy = yy.to(device)
-                    t7 = time.time()
-                    im = model(xx)
-                    t8 = time.time()
-
-                    infer_time = infer_time + t8 - t7
-
-                    loss = myloss(im.reshape(im.shape[0], -1), yy.reshape(im.shape[0], -1))
-        
-                    test_l2_step += loss.item()
+#            test_l2_step = 0
+#            model.eval()
+#            with torch.no_grad():
+#                for xx, yy in test_loader:
+#                    xx = xx.to(device)
+#                    yy = yy.to(device)
+#                    t7 = time.time()
+#                    im = model(xx)
+#                    t8 = time.time()
+#
+#                    infer_time = infer_time + t8 - t7
+#
+#                    loss = myloss(im.reshape(im.shape[0], -1), yy.reshape(im.shape[0], -1))
+#        
+#                    test_l2_step += loss.item()
         
 #            print(f"{infer_time=}")
             scheduler.step()
-            l2_train_step,  l2_test_step = train_l2_step/ntrain, test_l2_step/ntest
-            logger.info(f'{ep=} {l2_train_step=:.5f} {l2_test_step=:.5f}')
+            l2_train_step = train_l2_step/ntrain
+            logger.info(f'{ep=} {l2_train_step=:.5f}')
         
-        torch.save(model, f'../../models/archive/FNO_model_{var}_r_{res}_init1') 
+        torch.save(model, f'../../models/FNO_model_{var}_{res}') 
         #torch.save(model, f'../../models/archive/FNO_model_{var}_r_{res}_nf') 
         #torch.save(model, f'../../models/archive/FNO_model_{var}_r_{res}_Dinit') 
         logger.remove(ii)
@@ -380,7 +371,7 @@ if __name__ == '__main__':
         test_l2_step = 0
         myloss = LpLoss(size_average=False)
         #model = torch.load(f'../../models/archive/FNO_model_{var}_r_{res}_init1', map_location=device)
-        model = torch.load(f'/home/tzhang/FNO_PR_DNS/archived/20230410_v1/models/archive_2023_03_09/FNO_model_{var}_r_{res}', map_location=device)
+        model = torch.load(f'../../models/FNO_model_{var}_{res}', map_location=device)
         #model = torch.load(f'../../models/archive/FNO_model_{var}_r_{res}_nf', map_location=device)
         model.eval()
 
@@ -414,7 +405,7 @@ if __name__ == '__main__':
             if norm_flag == 'True':
                 tests = scaler.decode(tests)
 
-        np.save(f"../../tests/FNO_out_{var}_r_{res}_init1xxxx",tests)
+        np.save(f"../../tests/FNO_out_{var}_{res}",tests)
 
     elif process == 'STest': #super-resolution test
         test_l2_step = 0
