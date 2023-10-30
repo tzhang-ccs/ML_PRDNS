@@ -1,15 +1,21 @@
+import sys
+sys.path.append('../utils')
+
 import os
 import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
+
+import matplotlib.pyplot as plt
 from utilities3 import *
+import pdb
 import operator
 from functools import reduce
 from functools import partial
 import sys
 from timeit import default_timer
+from torchsummary import summary
 from Adam import Adam
 from loguru import logger
 import time
@@ -22,7 +28,7 @@ class SpectralConv2d_fast(nn.Module):
         super(SpectralConv2d_fast, self).__init__()
 
         """
-        2D Fourier layer. It does FFT, linear transform, and Inverse FFT.
+        2D Fourier layer. It does FFT, linear transform, and Inverse FFT.    
         """
 
         self.in_channels = in_channels
@@ -72,7 +78,7 @@ class FNO2d(nn.Module):
         2. 4 layers of the integral operators u' = (W + K)(u).
             W defined by self.w; K defined by self.conv .
         3. Project from the channel space to the output space by self.fc1 and self.fc2 .
-
+        
         input: the solution of the previous 10 timesteps + 2 locations (u(t-10, x, y), ..., u(t-1, x, y),  x, y)
         input shape: (batchsize, x=64, y=64, c=12)
         output: the solution of the next timestep
@@ -83,7 +89,7 @@ class FNO2d(nn.Module):
         self.modes2 = modes2
         self.width = width
         self.padding = 2 # pad the domain if input is non-periodic
-        self.fc0 = nn.Linear(3, self.width)
+        self.fc0 = nn.Linear(12, self.width)
         # input channel is 12: the solution of the previous 10 timesteps + 2 locations (u(t-10, x, y), ..., u(t-1, x, y),  x, y)
 
         self.conv0 = SpectralConv2d_fast(self.width, self.width, self.modes1, self.modes2)
@@ -119,7 +125,7 @@ class FNO2d(nn.Module):
         x = F.gelu(x)
         t2 = time.time()
 
-
+        
         x1 = self.conv1(x)
         x2 = self.w1(x)
         x = x1 + x2
@@ -139,7 +145,7 @@ class FNO2d(nn.Module):
         x = self.fc1(x)
         x = F.gelu(x)
         x = self.fc2(x)
-
+        
         return x
 
     def get_grid(self, shape, device):
@@ -150,54 +156,18 @@ class FNO2d(nn.Module):
         gridy = gridy.reshape(1, 1, size_y, 1).repeat([batchsize, size_x, 1, 1])
         return torch.cat((gridx, gridy), dim=-1).to(device)
 
-class myDataset(Dataset):
-    def __init__(self,var,begid,num,case_name,gen_flag=False):
-        self.path = f'/pscratch/sd/z/zhangtao/PR_DNS_base_ray/{case_name}/record-{var}/'
-        self.out_path = f'/pscratch/sd/z/zhangtao/FNO_PR_DNS/data/{case_name}/python_data/{var}/'
-        self.num = num
-        self.begid = begid
-        self.var = var
-        self.gen = gen_flag
-        os.system(f"mkdir -p {self.out_path}")
 
-    def __getitem__(self,index):
-        T_in = 1
-        ii = self.begid + index
-        filen = f'{self.var}-000{ii:04d}.h5'
+def gen4ddata(data,TT):
+    data_4d = np.zeros((data.shape[0]-TT, data.shape[1], data.shape[2], TT))
 
-        if self.gen == True:
-            data_x = []
-            for i in range(T_in):
-                fid = h5py.File(f'{self.path}/{self.var}-000{ii+i:04d}.h5', "r")
-                key_list = list(fid.keys())[0]
-                data = np.array(fid[key_list])
-                data_x.append(data)
+    for i in range(data_4d.shape[0]):
+        for j in range(TT):
+            data_4d[i,:,:,j] = data[i+j,:,:]
 
-            fid = h5py.File(f'{self.path}/{self.var}-000{ii+T_in:04d}.h5', "r")
-            key_list = list(fid.keys())[0]
-            data_y = np.array(fid[key_list])
+    return data_4d
 
-            np.savez(f'{self.out_path}/data-{index:04d}',data_x=data_x, data_y=data_y)
-            print(f'{self.out_path}/data-{index:04d}')
-
-        else:
-            data = np.load(f'{self.out_path}/data-{index:04d}.npz')
-            data_x = np.moveaxis(data['data_x'],0,2)
-            data_y = data['data_y']
-        return data_x,data_y
-
-    def __len__(self):
-        return self.num
-
-parser = argparse.ArgumentParser()
-parser.add_argument("-p", "--process", required=True)
-parser.add_argument("-v", "--var", required=True)
-args = parser.parse_args()
-process = args.process
-var = args.var
-
-case_num = 'out-entrainment2dm_d_0.512_g_2048_init1'
-#case_num = 'out-entrainment2dm_g_1024'
+case_name = 'out-entrainment2dm_d_0.512_g_2048_init1'
+case_name = 'out-entrainment2dm_g_1024'
 learning_rate = 0.002
 scheduler_step = 100
 scheduler_gamma = 0.5
@@ -207,61 +177,60 @@ width = 32
 step = 1
 device = torch.device('cuda:1')
 batch_size = 5
-res = 2048
+res = 1024
 
 logger.remove()
 fmt = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <cyan>{level}</cyan> | {message}"
 logger.add(sys.stdout, format=fmt)
-log_path = f'../../logs/FNO_log_{case_num}_{var}'
+log_path = f'../../logs/FNO_log_{case_name}_{var}'
 if os.path.exists(log_path):
     os.remove(log_path)
 ii = logger.add(log_path)
 
-if process == 'Data':
-    data_for_train = False
-    batch_size = 32
-    if data_for_train:
-        begid = 1000
-        num = 2000
-    else:
-        begid = 0
-        num = 200
-    dataset = myDataset(var,begid,num,case_num,gen_flag=True)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False,num_workers=10)
-    for xx,yy in dataloader:
-        a=1
+dataset_train_path = f'../../data/pr-dns/data/out-entrainment2dm_d_0.512_g_{res}_init2/pr_dns_{var}.npy'
+dataset_3d = np.load(dataset_train_path)
+dataset_4d = gen4ddata(dataset_3d, 20)
+del dataset_3d
+train_a = dataset_4d[:ntrain,:,:,:T_in].astype(np.float32)
+train_u = dataset_4d[:ntrain,:,:,T_in:T+T_in].astype(np.float32)
+test_a = dataset_4d[-ntest:,:,:,:T_in].astype(np.float32)
+test_u = dataset_4d[-ntest:,:,:,T_in:T+T_in].astype(np.float32)
+del dataset_4d
 
+train_a = torch.from_numpy(train_a).to(device)
+train_u = torch.from_numpy(train_u).to(device)
+test_a = torch.from_numpy(test_a).to(device)
+test_u = torch.from_numpy(test_u).to(device)
+
+    
+train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(train_a, train_u), batch_size=batch_size, shuffle=True)
+test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_a, test_u), batch_size=batch_size, shuffle=False)
+test_loader1 = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_a, test_u), batch_size=1, shuffle=False)
+ 
+del train_a
+del train_u
+del test_a
+
+    
 if process == 'Train':
-    begid = 0
-    num = 2000
-    print("beofre dataloader")
-    dataset = myDataset(var,begid,num,case_num)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True,num_workers=1)
-    print("after dataloader")
-
+    train_l2 = []
     model = FNO2d(modes, modes, width).to(device)
     optimizer = Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step, gamma=scheduler_gamma)
     myloss = LpLoss(size_average=False)
-    #model = nn.DataParallel(model,device_ids=[1,2])
-
+     
     for ep in range(epochs):
         model.train()
         train_l2_step = 0
-        for xx,yy in dataloader:
-            #print(xx.shape)
-            xx = xx.to(device).float()
-            yy = yy.to(device).float()
+        for xx, yy in train_loader:
+            xx = xx.to(device)
+            yy = yy.to(device)
+    
             im = model(xx)
 
             loss = myloss(im.reshape(im.shape[0], -1), yy.reshape(im.shape[0], -1))
             train_l2_step += loss.item()
-
+    
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
-        scheduler.step()
-        l2_train_step = train_l2_step/2000
-        logger.info(f'{ep=} {l2_train_step=:.5f}')
-        torch.save(model, f'../../models/FNO_model_{var}_r_{res}')

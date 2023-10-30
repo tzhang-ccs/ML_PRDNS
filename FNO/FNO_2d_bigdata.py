@@ -1,3 +1,5 @@
+import sys
+sys.path.append('../utils')
 import os
 import torch
 import numpy as np
@@ -8,7 +10,6 @@ from utilities3 import *
 import operator
 from functools import reduce
 from functools import partial
-import sys
 from timeit import default_timer
 from Adam import Adam
 from loguru import logger
@@ -151,14 +152,18 @@ class FNO2d(nn.Module):
         return torch.cat((gridx, gridy), dim=-1).to(device)
 
 class myDataset(Dataset):
-    def __init__(self,var,begid,num,case_name,gen_flag=False):
-        self.path = f'/pscratch/sd/z/zhangtao/FNO_PR_DNS/data/{case_name}/record-{var}/'
-        self.out_path = f'/pscratch/sd/z/zhangtao/FNO_PR_DNS/data/{case_name}/python_data/{var}/'
+    def __init__(self,var,begid,num,case_name,gen_flag=False,train_flag=True):
+        self.path = f'/pscratch/sd/z/zhangtao/PR_DNS_base_ray/{case_name}/record-{var}/'
         self.num = num
         self.begid = begid
         self.var = var
         self.gen = gen_flag
+        if train_flag == True:
+            self.out_path = f'/pscratch/sd/z/zhangtao/PR_DNS_base_ray/{case_name}/python_data/{var}/train'
+        else:
+            self.out_path = f'/pscratch/sd/z/zhangtao/PR_DNS_base_ray/{case_name}/python_data/{var}/test'
         os.system(f"mkdir -p {self.out_path}")
+
 
     def __getitem__(self,index):
         T_in = 1
@@ -196,8 +201,8 @@ args = parser.parse_args()
 process = args.process
 var = args.var
 
-case_num = 'out-entrainment2dm_d_0.512_g_2048_init1'
-case_num = 'out-entrainment2dm_g_1024'
+case_name = 'out-entrainment2dm_d_0.512_g_2048_init1'
+case_name = 'out-entrainment2dm_g_1024'
 learning_rate = 0.002
 scheduler_step = 100
 scheduler_gamma = 0.5
@@ -212,15 +217,21 @@ res = 1024
 logger.remove()
 fmt = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <cyan>{level}</cyan> | {message}"
 logger.add(sys.stdout, format=fmt)
-log_path = f'../../logs/FNO_log_{case_num}_{var}'
+log_path = f'../../logs/FNO_log_{case_name}_{var}'
 if os.path.exists(log_path):
     os.remove(log_path)
 ii = logger.add(log_path)
 
 if process == 'Data':
-    begid = 1000
-    num = 2000
-    dataset = myDataset(var,begid,num,case_num,gen_flag=True)
+    data_for_train = False
+    batch_size = 32
+    if data_for_train:
+        begid = 1000
+        num = 2000
+    else:
+        begid = 0
+        num = 200
+    dataset = myDataset(var,begid,num,case_name,gen_flag=True,train_flag=data_for_train)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False,num_workers=10)
     for xx,yy in dataloader:
         a=1
@@ -229,7 +240,7 @@ if process == 'Train':
     begid = 0
     num = 2000
     print("beofre dataloader")
-    dataset = myDataset(var,begid,num,case_num)
+    dataset = myDataset(var,begid,num,case_name)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True,num_workers=1)
     print("after dataloader")
 
@@ -259,3 +270,31 @@ if process == 'Train':
         l2_train_step = train_l2_step/2000
         logger.info(f'{ep=} {l2_train_step=:.5f}')
         torch.save(model, f'../../models/FNO_model_{var}_r_{res}')
+
+if process == 'Test':
+    begid = 0
+    num = 200
+    dataset = myDataset(var,begid,num,case_name,train_flag=False)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=False,num_workers=1)
+
+    model  = torch.load(f'../../models/FNO_model_{var}_r_{res}')
+    model.eval()
+
+    preds = []
+    trues = []
+    with torch.no_grad():
+        for xx,yy in dataloader:
+            xx = xx.to(device).float()
+            yy = yy.to(device).float().cpu().numpy()
+            im = model(xx).cpu().numpy()
+
+            preds.append(im)
+            trues.append(yy)
+
+
+    preds = np.array(preds)[...,0]
+    trues = np.array(trues)
+    outs = np.stack((preds, trues))
+    np.savez(f'../../tests/FNO_{var}_{res}',preds=preds, trues=trues)
+
+

@@ -13,4 +13,4 @@
 
 ulimit -s unlimited
 
-python FNO_2d_bigdata.py  -p Train -r vel
+python FNO_2d_bigdata.py  -p Train -v vel
