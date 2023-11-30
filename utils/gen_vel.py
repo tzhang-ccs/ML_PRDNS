@@ -1,9 +1,9 @@
 import numpy as np
 import os
-num = 200
+num = 500
 
 process = 'test'
-case_name = 'out-entrainment2dm_g_1024'
+case_name = 'out-entrainment2dm_g_2048_with_fe_moive'
 os.chdir(f"/pscratch/sd/z/zhangtao/PR_DNS_base_ray/{case_name}/python_data")
 
 for i in range(num):

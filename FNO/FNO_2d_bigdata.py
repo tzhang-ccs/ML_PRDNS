@@ -203,6 +203,7 @@ var = args.var
 
 case_name = 'out-entrainment2dm_d_0.512_g_2048_init1'
 case_name = 'out-entrainment2dm_g_1024'
+case_name = 'out-entrainment2dm_g_2048_with_fe_moive'
 learning_rate = 0.002
 scheduler_step = 100
 scheduler_gamma = 0.5
@@ -211,8 +212,8 @@ modes = 30#60#12
 width = 32
 step = 1
 device = torch.device('cuda:1')
-batch_size = 5
-res = 1024
+batch_size = 3
+res = 2048
 
 logger.remove()
 fmt = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <cyan>{level}</cyan> | {message}"
@@ -226,11 +227,11 @@ if process == 'Data':
     data_for_train = False
     batch_size = 32
     if data_for_train:
-        begid = 1000
+        begid = 0
         num = 2000
     else:
-        begid = 0
-        num = 200
+        begid = 3000
+        num = 500
     dataset = myDataset(var,begid,num,case_name,gen_flag=True,train_flag=data_for_train)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False,num_workers=10)
     for xx,yy in dataloader:
