@@ -7,6 +7,7 @@ import math
 from tqdm import tqdm
 
 import numpy as np
+import sys
 
 import torch
 from torch.optim import Adam
@@ -15,7 +16,7 @@ from torch.utils.data import DataLoader
 from models import FNO3d
 
 from train_utils.losses import LpLoss, PINO_loss3d, get_forcing
-from train_utils.datasets import KFDataset, KFaDataset, sample_data, PRDNS
+from train_utils.datasets import KFDataset, KFaDataset, sample_data
 from train_utils.utils import save_ckpt, count_params, dict2str
 
 try:
@@ -75,7 +76,7 @@ def train_ns(model,
                          #entity=config['log']['entity'], 
                          #group=config['log']['group'], 
                          config=config, #reinit=True, 
-                         name='PINO',
+                         name='PINN_step_5',
                          dir='../../logs',
                          #settings=wandb.Settings(start_method='fork')
                          )
@@ -98,10 +99,16 @@ def train_ns(model,
             u, a_in = next(u_loader) 
             u = u.to(device)
             a_in = a_in.to(device)
-            out = model(a_in)
-            print(f'u shape={u.shape}')
-            print(f'a_in shape={a_in.shape}')
-            print(f'out shape={out.shape}')
+            out = model(a_in) 
+
+            u = u[:,:,:,5]
+            out = out[:,:,:,5,...]
+            #print(a_in[0,0,0,0,-1])
+            #print(u[0,0,0,0])
+            #print(f'u shape={u.shape}')
+            #print(f'a_in shape={a_in.shape}')
+            #print(f'out shape={out.shape}')
+            #sys.exit()
 
             data_loss = lploss(out, u)
         else:
@@ -204,15 +211,6 @@ def subprocess(args):
                           n_samples=config['data']['n_data_samples'], 
                           offset=config['data']['offset'], 
                           t_duration=config['data']['t_duration'])
-        
-        u_set = PRDNS(paths=config['data']['paths'], 
-                          raw_res=config['data']['raw_res'],
-                          data_res=config['data']['data_res'], 
-                          pde_res=config['data']['data_res'], 
-                          n_samples=config['data']['n_data_samples'], 
-                          offset=config['data']['offset'], 
-                          t_duration=config['data']['t_duration'])
-        
         u_loader = DataLoader(u_set, batch_size=batchsize, num_workers=4, shuffle=True)
 
         a_set = KFaDataset(paths=config['data']['paths'], 

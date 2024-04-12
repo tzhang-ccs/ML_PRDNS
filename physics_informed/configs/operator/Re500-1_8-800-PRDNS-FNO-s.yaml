@@ -1,12 +1,12 @@
 data:
   name: KF
-  paths: ['/global/homes/z/zhangtao/cfs_m4402/PR_DNS_out/pinn/NS-Re500_T300_id0-shuffle.npy'] #300, 513, 256, 256
+  paths: ['/global/homes/z/zhangtao/cfs_m4402/PR_DNS_out/out-entrainment2dm_g_128_with_fe_moive/python_data/4d/supersat.npy']
   Re: 500
   offset: 0
-  total_num: 300
-  raw_res: [256, 256, 513]
+  total_num: 496
+  raw_res: [128, 128, 10]
   n_data_samples: 100
-  data_res: [64, 64, 129]  # resolution in 1 second
+  data_res: [64, 64, 257]  # resolution in 1 second
   pde_res: [256, 256, 513]   # resolution in 1 second
   a_offset: 0
   n_a_samples: 275
@@ -22,28 +22,28 @@ model:
   modes3: [12, 12, 12, 12]
   fc_dim: 128
   act: gelu
-  pad_ratio: [0.0, 0.125]
+  pad_ratio: [0, 0.125]
 
 train:
-  batchsize: 3
+  batchsize: 2
   start_iter: 0
   num_iter: 200
-  milestones: [20, 60, 120]
+  milestones: [20, 40]
   base_lr: 0.001
   scheduler_gamma: 0.5
-  ic_loss: 10.0
-  f_loss: 1.0
-  xy_loss: 0.0
+  ic_loss: 0.0
+  f_loss: 0.0
+  xy_loss: 1.0
   save_step: 5000
   eval_step: 20
 
 test:
   batchsize: 1
-  #data_res: [256, 256, 513]
-  data_res: [64,64,257]
+  data_res: [64, 64, 257]
+  ckpt: model-400.pt
 
 log:
-  logdir: Re500-1_8s-800-PINO-s
+  logdir: Re500-1_8s-800-FNO-s
   entity: hzzheng-pino
   project: PINO-KF-Re500
-  group: Re500-1_8s-800-PINO-s
+  group: Re500-1_8s-800-FNO-s

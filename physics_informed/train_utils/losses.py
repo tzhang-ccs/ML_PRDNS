@@ -183,6 +183,7 @@ class LpLoss(object):
     def rel(self, x, y):
         num_examples = x.size()[0]
 
+
         diff_norms = torch.norm(x.reshape(num_examples,-1) - y.reshape(num_examples,-1), self.p, 1)
         y_norms = torch.norm(y.reshape(num_examples,-1), self.p, 1)
 
@@ -258,6 +259,10 @@ def PINO_loss3d(u, u0, forcing, v=1/40, t_interval=1.0):
 
     Du = FDM_NS_vorticity(u, v, t_interval)
     f = forcing.repeat(batchsize, 1, 1, nt-2)
+
+    #print('In PINO_loss3d')
+    #print(Du.shape)
+    #print(f.shape)
     loss_f = lploss(Du, f)
 
     return loss_ic, loss_f

@@ -197,13 +197,13 @@ def subprocess(args):
     else:
         # training set
         batchsize = config['train']['batchsize']
-        u_set = KFDataset(paths=config['data']['paths'], 
-                          raw_res=config['data']['raw_res'],
-                          data_res=config['data']['data_res'], 
-                          pde_res=config['data']['data_res'], 
-                          n_samples=config['data']['n_data_samples'], 
-                          offset=config['data']['offset'], 
-                          t_duration=config['data']['t_duration'])
+        # u_set = KFDataset(paths=config['data']['paths'], 
+        #                   raw_res=config['data']['raw_res'],
+        #                   data_res=config['data']['data_res'], 
+        #                   pde_res=config['data']['data_res'], 
+        #                   n_samples=config['data']['n_data_samples'], 
+        #                   offset=config['data']['offset'], 
+        #                   t_duration=config['data']['t_duration'])
         
         u_set = PRDNS(paths=config['data']['paths'], 
                           raw_res=config['data']['raw_res'],
@@ -215,21 +215,30 @@ def subprocess(args):
         
         u_loader = DataLoader(u_set, batch_size=batchsize, num_workers=4, shuffle=True)
 
-        a_set = KFaDataset(paths=config['data']['paths'], 
-                           raw_res=config['data']['raw_res'], 
-                           pde_res=config['data']['pde_res'], 
-                           n_samples=config['data']['n_a_samples'],
-                           offset=config['data']['a_offset'], 
-                           t_duration=config['data']['t_duration'])
-        a_loader = DataLoader(a_set, batch_size=batchsize, num_workers=4, shuffle=True)
+        # a_set = KFaDataset(paths=config['data']['paths'], 
+        #                    raw_res=config['data']['raw_res'], 
+        #                    pde_res=config['data']['pde_res'], 
+        #                    n_samples=config['data']['n_a_samples'],
+        #                    offset=config['data']['a_offset'], 
+        #                    t_duration=config['data']['t_duration'])
+        # a_loader = DataLoader(a_set, batch_size=batchsize, num_workers=4, shuffle=True)
         # val set
-        valset = KFDataset(paths=config['data']['paths'], 
+        # valset = KFDataset(paths=config['data']['paths'], 
+        #                    raw_res=config['data']['raw_res'],
+        #                    data_res=config['test']['data_res'], 
+        #                    pde_res=config['test']['data_res'], 
+        #                    n_samples=config['data']['n_test_samples'], 
+        #                    offset=config['data']['testoffset'], 
+        #                    t_duration=config['data']['t_duration'])
+        
+        valset = PRDNS(paths=config['data']['paths'], 
                            raw_res=config['data']['raw_res'],
                            data_res=config['test']['data_res'], 
                            pde_res=config['test']['data_res'], 
                            n_samples=config['data']['n_test_samples'], 
                            offset=config['data']['testoffset'], 
                            t_duration=config['data']['t_duration'])
+        
         val_loader = DataLoader(valset, batch_size=batchsize, num_workers=4)
         print(f'Train set: {len(u_set)}; Test set: {len(valset)}; IC set: {len(a_set)}')
         optimizer = Adam(model.parameters(), lr=config['train']['base_lr'])
@@ -242,7 +251,7 @@ def subprocess(args):
             scheduler.load_state_dict(ckpt['scheduler'])
             config['train']['start_iter'] = scheduler.last_epoch
         train_ns(model, 
-                 u_loader, a_loader, 
+                 u_loader, u_loader, 
                  val_loader, 
                  optimizer, scheduler, 
                  device, 

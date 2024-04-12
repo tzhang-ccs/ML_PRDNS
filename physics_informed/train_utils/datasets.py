@@ -306,14 +306,14 @@ class KFDataset(Dataset):
         self.data_res = data_res    # data resolution
         self.pde_res = pde_res      # pde loss resolution
         self.raw_res = raw_res      # raw data resolution
-        self.t_duration = t_duration
+        self.t_duration = t_duration #dT?
         self.paths = paths
         self.offset = offset
         self.n_samples = n_samples
         if t_duration == 1.0:
             self.T = self.pde_res[2]
         else:
-            self.T = int(self.pde_res[2] * t_duration) + 1    # number of points in time dimension
+            self.T = int(self.pde_res[2] * t_duration) + 1    # total time
 
         self.load()
         if total_samples is not None:
@@ -328,30 +328,28 @@ class KFDataset(Dataset):
         datapath = self.paths[0]
         raw_data = np.load(datapath, mmap_mode='r')
         # subsample ratio
-        sub_x = self.raw_res[0] // self.data_res[0]
-        sub_t = (self.raw_res[2] - 1) // (self.data_res[2] - 1)
+        sub_x = self.raw_res[0] // self.data_res[0]  #256//64
+        sub_t = (self.raw_res[2] - 1) // (self.data_res[2] - 1) #512/256
         
-        a_sub_x = self.raw_res[0] // self.pde_res[0]
-        # load data
+        a_sub_x = self.raw_res[0] // self.pde_res[0]  #256/256
+        # load data  n_samples x 256 x 64 x 64
         data = raw_data[self.offset: self.offset + self.n_samples, ::sub_t, ::sub_x, ::sub_x]
-        print(data.shape)
+        print(raw_data.shape)
         # divide data
         if self.t_duration != 0.:
-            end_t = self.raw_res[2] - 1
-            K = int(1/self.t_duration)
-            step = end_t // K
+            end_t = self.raw_res[2] - 1  
+            K = int(1/self.t_duration)  
+            step = end_t // K  
             data = self.partition(data)
-            print(data.shape)
             a_data = raw_data[self.offset: self.offset + self.n_samples, 0:end_t:step, ::a_sub_x, ::a_sub_x]
-            print(a_data.shape)
-            a_data = a_data.reshape(self.n_samples * K, 1, self.pde_res[0], self.pde_res[1])    # 2N x 1 x S x S
-            print(a_data.shape)
+            a_data = a_data.reshape(self.n_samples * K, 1, self.pde_res[0], self.pde_res[1]) 
         else:
             a_data = raw_data[self.offset: self.offset + self.n_samples, 0:1, ::a_sub_x, ::a_sub_x]
 
+        
         # convert into torch tensor
         data = torch.from_numpy(data).to(torch.float32)
-        a_data = torch.from_numpy(a_data).to(torch.float32).permute(0, 2, 3, 1)
+        a_data = torch.from_numpy(a_data).to(torch.float32).permute(0, 2, 3, 1) #Nx1xSxS
         self.data = data.permute(0, 2, 3, 1)
 
         S = self.pde_res[1]
@@ -360,6 +358,10 @@ class KFDataset(Dataset):
         gridx, gridy, gridt = get_grid3d(S, self.T)
         self.grid = torch.cat((gridx[0], gridy[0], gridt[0]), dim=-1)   # S x S x T x 3
         self.a_data = a_data
+
+        print(f'gridx shape={gridx.shape}')
+        print(f'gridy shape={gridy.shape}')
+        print(f'gridt shape={gridt.shape}')
 
     def partition(self, data):
         '''
@@ -372,6 +374,107 @@ class KFDataset(Dataset):
         N, T, S = data.shape[:3]
         K = int(1 / self.t_duration)
         new_data = np.zeros((K * N, T // K + 1, S, S))
+        step = T // K
+        for i in range(N):
+            for j in range(K):
+                new_data[i * K + j] = data[i, j * step: (j+1) * step + 1]
+        return new_data
+
+
+    def __getitem__(self, idx):
+        a_data = torch.cat((
+            self.grid, 
+            self.a_data[idx].repeat(1, 1, self.T, 1)
+        ), dim=-1)
+        return self.data[idx], a_data
+
+    def __len__(self, ):
+        return self.data.shape[0]
+
+class PRDNS(Dataset):
+    def __init__(self, paths, 
+                 data_res, pde_res, 
+                 raw_res, 
+                 n_samples=None, 
+                 total_samples=None,
+                 idx=0,
+                 offset=0,
+                 t_duration=1.0):
+        super().__init__()
+        self.data_res = data_res    # data resolution
+        self.pde_res = pde_res      # pde loss resolution
+        self.raw_res = raw_res      # raw data resolution
+        self.t_duration = t_duration #dT?
+        self.paths = paths
+        self.offset = offset
+        self.n_samples = n_samples
+        if t_duration == 1.0:
+            self.T = self.pde_res[2]
+        else:
+            self.T = int(self.pde_res[2] * t_duration)    # total time
+
+        self.load()
+        if total_samples is not None:
+            print(f'Load {total_samples} samples starting from {idx}th sample')
+            self.data = self.data[idx:idx + total_samples]
+            self.a_data = self.a_data[idx:idx + total_samples]
+            
+        self.data_s_step = pde_res[0] // data_res[0]
+        self.data_t_step = (pde_res[2]) // (data_res[2])
+
+    def load(self):
+        datapath = self.paths[0]
+        raw_data = np.load(datapath, mmap_mode='r')
+        # subsample ratio
+        sub_x = self.raw_res[0] // self.data_res[0]  #256//64
+        sub_t = (self.raw_res[2]) // (self.data_res[2]) #512/256
+        
+        a_sub_x = self.raw_res[0] // self.pde_res[0]  #256/256
+        # load data  n_samples x 256 x 64 x 64
+        data = raw_data[self.offset: self.offset + self.n_samples, ::sub_t, ::sub_x, ::sub_x]
+        print(raw_data.shape)
+        # divide data
+        if self.t_duration != 0.:
+            end_t = self.raw_res[2]  
+            K = int(1/self.t_duration)  
+            step = end_t // K  
+            data = self.partition(data)
+            a_data = raw_data[self.offset: self.offset + self.n_samples, 0:end_t:step, ::a_sub_x, ::a_sub_x]
+            a_data = a_data.reshape(self.n_samples * K, 1, self.pde_res[0], self.pde_res[1])    # 2N x 1 x S x S
+        else:
+            a_data = raw_data[self.offset: self.offset + self.n_samples, 0:1, ::a_sub_x, ::a_sub_x]
+
+        
+        # convert into torch tensor
+        data = torch.from_numpy(data).to(torch.float32)
+        a_data = torch.from_numpy(a_data).to(torch.float32).permute(0, 2, 3, 1) #Nx1xSxS
+        self.data = data.permute(0, 2, 3, 1)
+
+        S = self.pde_res[1]
+        
+        a_data = a_data[:, :, :, :, None]   # N x S x S x 1 x 1
+        gridx, gridy, gridt = get_grid3d(S, self.T)
+        print(f'gridx shape={gridx.shape}')
+        print(f'gridx shape={gridy.shape}')
+        print(f'gridx shape={gridt.shape}')
+
+        self.grid = torch.cat((gridx[0], gridy[0], gridt[0]), dim=-1)   # S x S x T x 3
+        self.a_data = a_data
+
+        print(data.shape)
+        print(a_data.shape)
+
+    def partition(self, data):
+        '''
+        Args:
+            data: tensor with size N x T x S x S
+
+        Returns:
+            output: int(1/t_duration) *N x (T//2 + 1) x 128 x 128
+        '''
+        N, T, S = data.shape[:3]
+        K = int(1 / self.t_duration)
+        new_data = np.zeros((K * N, T // K, S, S))
         step = T // K
         for i in range(N):
             for j in range(K):

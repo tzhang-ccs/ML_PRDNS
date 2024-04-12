@@ -1,15 +1,15 @@
 data:
   name: KF
-  paths: ['/raid/hongkai/NS-Re500_T300_id0-shuffle.npy']
+  paths: ['/global/homes/z/zhangtao/cfs_m4402/PR_DNS_out/pinn/NS-Re500_T300_id0-shuffle.npy']
   Re: 500
   offset: 0
   total_num: 300
   raw_res: [256, 256, 513]
   n_data_samples: 100
   data_res: [64, 64, 257]  # resolution in 1 second
-  pde_res: [64, 64, 129]   # resolution in 1 second
+  pde_res: [256, 256, 513]   # resolution in 1 second
   a_offset: 0
-  n_a_samples: 250
+  n_a_samples: 275
   testoffset: 275
   n_test_samples: 25
   t_duration: 0.125
@@ -27,15 +27,15 @@ model:
 train:
   batchsize: 2
   start_iter: 0
-  num_iter: 50_001
-  milestones: [20_000, 40_000]
+  num_iter: 200
+  milestones: [20, 40]
   base_lr: 0.001
   scheduler_gamma: 0.5
   ic_loss: 0.0
   f_loss: 0.0
   xy_loss: 1.0
   save_step: 5000
-  eval_step: 5000
+  eval_step: 20
 
 test:
   batchsize: 1
